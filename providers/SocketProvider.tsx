@@ -6,7 +6,8 @@ const SocketContext = createContext({})
 export const SocketProvider: React.FC<{ children: any }> = ({ children }) => {
     const socket = io('http://localhost:5050', {
         withCredentials: true,
-      })
+        reconnectionDelayMax: 10000
+    })
 
     return (
         <SocketContext.Provider
@@ -19,11 +20,7 @@ export const SocketProvider: React.FC<{ children: any }> = ({ children }) => {
     )
 }
 
-export const useSocketContext = (): {
-    socket: Socket
-} => {
+export const useSocketContext = (): { socket: Socket } => {
     const context = useContext<{ [k: string]: any }>(SocketContext)
-    return {
-        socket: context.socket
-    }
+    return { socket: context.socket }
 }

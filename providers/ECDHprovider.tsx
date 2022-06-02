@@ -35,23 +35,22 @@ function buff2Str(buff: number[]) {
 
 export const ECDHprovider: React.FC<{ children: any }> = ({ children }) => {
     const [privKey, setPrivKey] = useState<string>('')
-    const [secret, setSecret] = useState<string>('')
+    const [secret, setSecret] = useState<CryptoKey>()
 
 
     const generateKeys = async () => {
         const keys = await window.crypto.subtle.generateKey(
             { name: 'ECDH', namedCurve: 'P-256' },
-            true,
+            false,
             ['deriveKey', 'deriveBits']
         )
 
         const exPubKey = await window.crypto.subtle.exportKey('raw', keys.publicKey)
-        const exPrivKey = await window.crypto.subtle.exportKey('pkcs8', keys.privateKey)
 
-        setPrivKey(buf2Hex(exPrivKey))
+        setPrivKey(buf2Hex(keys.privateKey))
 
         return {
-            priv: buf2Hex(exPrivKey),
+            priv: buf2Hex(keys.privateKey),
             pub: buf2Hex(exPubKey)
         }
     }
@@ -62,7 +61,7 @@ export const ECDHprovider: React.FC<{ children: any }> = ({ children }) => {
             hex2Arr(privKey),
             { name: 'ECDH', namedCurve: 'P-256' },
             true,
-            ["deriveBits"]
+            ['deriveKey']
         )
 
         const importedPubKey = await window.crypto.subtle.importKey(
@@ -70,57 +69,48 @@ export const ECDHprovider: React.FC<{ children: any }> = ({ children }) => {
             hex2Arr(bobPubKey),
             { name: 'ECDH', namedCurve: 'P-256' },
             true,
-            ["deriveBits"]
+            ['deriveKey']
         )
 
-        const sharedSecret = await window.crypto.subtle.deriveBits(
-            { name: 'ECDH', public: importedPubKey },
+        const sharedSecret = await window.crypto.subtle.deriveKey(
+            { name: "ECDH", public: importedPubKey },
             importedPrivKey,
-            256
-        )
+            { name: "AES-GCM", length: 256 },
+            false,
+            ["encrypt", "decrypt"]
+        );
 
-        setSecret(buf2Hex(sharedSecret))
+        setSecret(sharedSecret)
     }
 
     const encrypt = async (msg: string): Promise<string> => {
-        const sha = await crypto.subtle.digest({ name: 'SHA-256' }, new TextEncoder().encode(secret))
-        const aesKey = await window.crypto.subtle.importKey(
-            "raw",
-            sha,
-            "AES-CBC",
-            true,
-            ["encrypt", "decrypt"]
-        );
-
-        const encrypted = await window.crypto.subtle.encrypt(
-            {
-                name: "AES-CBC",
-                iv: new Uint8Array(16),
-            },
-            aesKey,
-            str2Buff(msg)
-        )
-        return buf2Hex(encrypted)
+        if (secret) {
+            const encrypted = await window.crypto.subtle.encrypt(
+                {
+                    name: "AES-GCM",
+                    iv: new Uint8Array(16),
+                },
+                secret,
+                new TextEncoder().encode(msg)
+            )
+            return buf2Hex(encrypted)
+        }
+        return ''
     }
 
     const decrypt = async (msg: string) => {
-        const sha = await crypto.subtle.digest({ name: 'SHA-256' }, new TextEncoder().encode(secret))
-        const aesKey = await window.crypto.subtle.importKey(
-            "raw",
-            sha,
-            "AES-CBC",
-            true,
-            ["encrypt", "decrypt"]
-        );
-        const decrypted = await window.crypto.subtle.decrypt(
-            {
-                name: "AES-CBC",
-                iv: new Uint8Array(16)
-            },
-            aesKey,
-            str2Buff(msg)
-        )
-        return buff2Str(decrypted)
+        if (secret) {
+            const decrypted = await window.crypto.subtle.decrypt(
+                {
+                    name: "AES-GCM",
+                    iv: new Uint8Array(16),
+                },
+                secret,
+                hex2Arr(msg)
+            )
+            return buff2Str(decrypted)
+        }
+        return ''
     }
 
     return (
@@ -141,7 +131,7 @@ export const ECDHprovider: React.FC<{ children: any }> = ({ children }) => {
 }
 
 export const useECDHcontext = (): {
-    secret: string,
+    secret?: CryptoKey,
     privKey: string,
     generateSecret: (k: string) => Promise<void>,
     generateKeys: () => Promise<{ pub: string, priv: string }>,
