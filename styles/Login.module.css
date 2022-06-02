@@ -1,0 +1,38 @@
+.loginContainer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100vw;
+  height: 100vh;
+  flex-direction: column;
+  gap: 50px;
+}
+
+.button {
+  width: 200px;
+  padding: 10px;
+  background-color: #8a0a88;
+  color: #fefefe;
+  font-size: 20px;
+  border: none;
+  border-radius: 20px;
+  cursor: pointer;
+  box-shadow: rgba(50, 50, 93, 0.25) 0px 13px 27px -5px,
+    rgba(0, 0, 0, 0.3) 0px 8px 16px -8px;
+}
+
+.button.secondary {
+  background-color: transparent;
+  color: black;
+  width: 203px;
+}
+
+.button:hover {
+  background-color: transparent;
+  color: black;
+}
+
+.button.secondary:hover {
+  background-color: #8a0a88;
+  color: #fefefe;
+}

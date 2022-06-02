@@ -1,0 +1,28 @@
+.container {
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  width: 100vw;
+  height: 100vh;
+  flex-direction: column;
+  gap: 50px;
+}
+
+.msgsContainer {
+  width: 60vw;
+  height: 60vh;
+  overflow-x: hidden;
+  overflow-y: scroll;
+}
+
+.msgWrapper {
+  display: flex;
+  align-items: center;
+  justify-content: start;
+  padding: 15px;
+}
+
+.msgWrapper.yours {
+  justify-content: end;
+}
+

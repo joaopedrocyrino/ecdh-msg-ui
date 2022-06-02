@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState } from 'react'
+import React, { createContext, useContext, useState } from 'react'
 
 const ECDHcontext = createContext({})
 
@@ -19,24 +19,24 @@ const hex2Arr = (str: string) => {
     return new Uint8Array(arr)
 }
 
+const str2Buff = (str: string) => {
+    var buf = new ArrayBuffer(str.length * 2);
+    var bufView = new Uint8Array(buf);
+    for (var i = 0, strLen = str.length; i < strLen; i++) {
+        bufView[i] = str.charCodeAt(i);
+    }
+    return buf;
+}
+
+function buff2Str(buff: number[]) {
+    // @ts-ignore
+    return String.fromCharCode.apply(null, new Uint8Array(buff));
+}
+
 export const ECDHprovider: React.FC<{ children: any }> = ({ children }) => {
     const [privKey, setPrivKey] = useState<string>('')
-    const [pubKey, setPubKey] = useState<string>('')
     const [secret, setSecret] = useState<string>('')
 
-    const setPersistantPrivKey = (key: string) => {
-        if (key) {
-            localStorage.setItem('privKey', key)
-        } else { localStorage.removeItem('privKey') }
-        setPrivKey(key)
-    }
-
-    const setPersistantPubKey = (key: string) => {
-        if (key) {
-            localStorage.setItem('pubKey', key)
-        } else { localStorage.removeItem('pubKey') }
-        setPubKey(key)
-    }
 
     const generateKeys = async () => {
         const keys = await window.crypto.subtle.generateKey(
@@ -46,10 +46,14 @@ export const ECDHprovider: React.FC<{ children: any }> = ({ children }) => {
         )
 
         const exPubKey = await window.crypto.subtle.exportKey('raw', keys.publicKey)
-        const exPrivKey = await window.crypto.subtle.exportKey('pkcs8', keys.privateKey)      
+        const exPrivKey = await window.crypto.subtle.exportKey('pkcs8', keys.privateKey)
 
-        setPersistantPrivKey(buf2Hex(exPrivKey))
-        setPersistantPubKey(buf2Hex(exPubKey))
+        setPrivKey(buf2Hex(exPrivKey))
+
+        return {
+            priv: buf2Hex(exPrivKey),
+            pub: buf2Hex(exPubKey)
+        }
     }
 
     const generateSecret = async (bobPubKey: string) => {
@@ -58,7 +62,7 @@ export const ECDHprovider: React.FC<{ children: any }> = ({ children }) => {
             hex2Arr(privKey),
             { name: 'ECDH', namedCurve: 'P-256' },
             true,
-            []
+            ["deriveBits"]
         )
 
         const importedPubKey = await window.crypto.subtle.importKey(
@@ -66,7 +70,7 @@ export const ECDHprovider: React.FC<{ children: any }> = ({ children }) => {
             hex2Arr(bobPubKey),
             { name: 'ECDH', namedCurve: 'P-256' },
             true,
-            []
+            ["deriveBits"]
         )
 
         const sharedSecret = await window.crypto.subtle.deriveBits(
@@ -78,19 +82,57 @@ export const ECDHprovider: React.FC<{ children: any }> = ({ children }) => {
         setSecret(buf2Hex(sharedSecret))
     }
 
-    useEffect(() => {
-        setPrivKey(localStorage.getItem('privKey') ?? '')
-        setPubKey(localStorage.getItem('pubKey') ?? '')
-    }, [])
+    const encrypt = async (msg: string): Promise<string> => {
+        const sha = await crypto.subtle.digest({ name: 'SHA-256' }, new TextEncoder().encode(secret))
+        const aesKey = await window.crypto.subtle.importKey(
+            "raw",
+            sha,
+            "AES-CBC",
+            true,
+            ["encrypt", "decrypt"]
+        );
+
+        const encrypted = await window.crypto.subtle.encrypt(
+            {
+                name: "AES-CBC",
+                iv: new Uint8Array(16),
+            },
+            aesKey,
+            str2Buff(msg)
+        )
+        return buf2Hex(encrypted)
+    }
+
+    const decrypt = async (msg: string) => {
+        const sha = await crypto.subtle.digest({ name: 'SHA-256' }, new TextEncoder().encode(secret))
+        const aesKey = await window.crypto.subtle.importKey(
+            "raw",
+            sha,
+            "AES-CBC",
+            true,
+            ["encrypt", "decrypt"]
+        );
+        const decrypted = await window.crypto.subtle.decrypt(
+            {
+                name: "AES-CBC",
+                iv: new Uint8Array(16)
+            },
+            aesKey,
+            str2Buff(msg)
+        )
+        return buff2Str(decrypted)
+    }
 
     return (
         <ECDHcontext.Provider
             value={{
                 secret,
-                pubKey,
                 privKey,
+                setPrivKey,
                 generateSecret,
-                generateKeys
+                generateKeys,
+                encrypt,
+                decrypt
             }}
         >
             {children}
@@ -100,17 +142,21 @@ export const ECDHprovider: React.FC<{ children: any }> = ({ children }) => {
 
 export const useECDHcontext = (): {
     secret: string,
-    pubKey: string,
     privKey: string,
     generateSecret: (k: string) => Promise<void>,
-    generateKeys: () => Promise<void>
+    generateKeys: () => Promise<{ pub: string, priv: string }>,
+    setPrivKey: (k?: string) => Promise<void>,
+    encrypt: (msg: string) => Promise<string>
+    decrypt: (msg: string) => Promise<string>
 } => {
     const context = useContext<{ [k: string]: any }>(ECDHcontext)
     return {
         secret: context.secret,
-        pubKey: context.pubKey,
         privKey: context.privKey,
         generateSecret: context.generateSecret,
-        generateKeys: context.generateKeys
+        generateKeys: context.generateKeys,
+        setPrivKey: context.setPrivKey,
+        encrypt: context.encrypt,
+        decrypt: context.decrypt
     }
 }
